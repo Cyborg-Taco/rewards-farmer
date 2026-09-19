@@ -35,7 +35,12 @@ $env:QUERY_SOURCE="trends"; python src/main.py  # PowerShell
 
 `trends` needs no account, no API key and no model download, so the Ollama setup below is optional if you use it. If every feed is unreachable it falls back to `nouns.txt` rather than failing the run.
 
-You should also have an Ollama account created (for the LLM), the `ollama` tool installed, and you should have signed in to the Ollama CLI via the command line using `ollama signin`. This project will use a minimal amount of Ollama cloud usage using `gemma4:cloud`. If you wish to use a different model, please change the `model` parameter in the `get_ollama_response` function in `src/llm_utils.py`.
+You should also have an Ollama account created (for the LLM), the `ollama` tool installed, and you should have signed in to the Ollama CLI via the command line using `ollama signin`. This project will use a minimal amount of Ollama cloud usage using `gemma4:cloud`. If you wish to use a different model, please use the `OLLAMA_MODEL` environment variable:
+
+```sh
+OLLAMA_MODEL=phi3.5:latest python src/main.py          # bash
+$env:OLLAMA_MODEL="phi3.5:latest"; python src/main.py  # PowerShell
+```
 
 You must also provide an image for the script to upload to complete the visual search task. A helper script is included at `src/random_image_for_visual_search.py` that will download an image from Wikipedia named `visual_search.jpg` into the project root for you. You may also provide an image of your own, just ensure that the absolute path of the image is placed in the `VISUAL_SEARCH_IMAGE_PATH` constant at the top of `rewards_tasks.py`.
 
@@ -60,11 +65,28 @@ You must also have a [webdriver for Microsoft Edge](https://learn.microsoft.com/
 
 The profile directory in `src/constants.py` is set to `Default`. If this signs you in to a global profile that you do not want to use for automation, then you can create a new profile from within the webdriver instance manually and then change the `PROFILE_NAME` constant to `Profile 1` (or the equivalent number).
 
-Run main.py (`python src/main.py`, it must be run from the root directory so the relative paths work out), wait for the page to launch, and then CTRL-C to quit the application immediately. Sign in to the created profile with your Microsoft account on both Bing and `rewards.bing.com`.
+Run main.py (`python src/main.py`; paths are resolved from the repository, so it can be started from any directory), wait for the page to launch, and then CTRL-C to quit the application immediately. Sign in to the created profile with your Microsoft account on both Bing and `rewards.bing.com`.
 
 EU Users: you may have to accept a consent banner once on `rewards.bing.com` and on the Bing search page, `bing.com`. Once you consent, your choice will be saved for future runs using the same profile, so you will not need to interact with the banner during automated runs.
 
 Close all webdriver browser instances. Run `main.py` again; the automation should start working.
+
+# If Edge will not start
+
+When the browser fails to start, the log names the likely cause from the driver's own message, and falls back to printing that message as is. Three optional environment variables help when it does not:
+
+| Variable | Effect |
+| --- | --- |
+| `MSEDGEDRIVER_PATH` | Full path to `msedgedriver` to use, instead of letting selenium look for one. Try this first on *Unable to obtain driver for MicrosoftEdge*. |
+| `EDGE_BINARY` | Full path to the Edge executable, for an install selenium does not find on its own. |
+| `REWARDS_DRIVER_LOG` | Path to write a verbose msedgedriver log to. On *Chrome instance exited* this log holds Edge's actual reason; attach it to a bug report. |
+
+```sh
+$env:REWARDS_DRIVER_LOG="msedgedriver.log"; python src/main.py   # PowerShell
+REWARDS_DRIVER_LOG=msedgedriver.log python src/main.py          # bash
+```
+
+`src/check_selectors.py` starts Edge the same way and reads the same variables.
 
 # Running more than one account
 

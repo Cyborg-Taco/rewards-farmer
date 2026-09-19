@@ -1,8 +1,12 @@
+import os
 import re
 from typing import Generator
 import logging
 import random
 import ollama
+import os
+
+from constants import REPO_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -41,12 +45,12 @@ _CLIENT = ollama.Client(timeout=180)
 
 MAX_EMPTY_RETRIES = 5
 
+DEFAULT_MODEL = os.environ.get("OLLAMA_MODEL", "gemma4:cloud")
 
 class OllamaOfflineException(Exception):
 	pass
 
-
-def get_ollama_response(messages: list[dict[str, str]], model: str="gemma4:cloud") -> str:
+def get_ollama_response(messages: list[dict[str, str]], model: str=DEFAULT_MODEL) -> str:
 	try:
 		response = _CLIENT.chat(
 			model=model,
@@ -135,7 +139,7 @@ def get_related_search_queries(seed_word: str, num_queries: int=20) -> Generator
 
 
 NOUNS = [
-	noun.strip().lower() for noun in open("nouns.txt", "r").read().splitlines()
+	noun.strip().lower() for noun in open(os.path.join(REPO_ROOT, "nouns.txt"), "r", encoding="utf-8").read().splitlines()
 	if len(noun.strip()) >= 3
 ]
 
