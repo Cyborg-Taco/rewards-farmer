@@ -30,8 +30,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import accounts
 import signin
-from constants import USER_DATA_DIR
-
 
 SIGNIN_SCRIPT = os.path.join(os.path.dirname(__file__), "..", "src", "signin.py")
 
@@ -58,7 +56,7 @@ class EnvironmentTestCase(unittest.TestCase):
 	"""Restores everything these tests reach into, so ordering cannot matter."""
 
 	def setUp(self):
-		self.addCleanup(os.environ.pop, accounts.ENV_VAR, None)
+		self.addCleanup(os.environ.pop, accounts.ACCOUNTS_ENV_VAR, None)
 
 
 class TestAccountSelection(EnvironmentTestCase):
@@ -69,20 +67,20 @@ class TestAccountSelection(EnvironmentTestCase):
 	"""
 
 	def test_unset_is_the_default_profile(self):
-		os.environ.pop(accounts.ENV_VAR, None)
+		os.environ.pop(accounts.ACCOUNTS_ENV_VAR, None)
 
-		self.assertEqual(signin.account_to_sign_in().user_data_dir, USER_DATA_DIR)
+		self.assertEqual(signin.account_to_sign_in().user_data_dir, os.environ.get(accounts.DATA_DIR_ENV_VAR, accounts.DEFAULT_ROOT_DATA_DIR))
 
 	def test_one_name_is_that_profile(self):
-		os.environ[accounts.ENV_VAR] = "personal"
+		os.environ[accounts.ACCOUNTS_ENV_VAR] = "personal"
 
 		account = signin.account_to_sign_in()
 
 		self.assertEqual(account.name, "personal")
-		self.assertEqual(account.user_data_dir, os.path.join(USER_DATA_DIR, "personal"))
+		self.assertEqual(account.user_data_dir, os.path.join(os.environ.get(accounts.DATA_DIR_ENV_VAR, accounts.DEFAULT_ROOT_DATA_DIR), "personal"))
 
 	def test_several_names_are_refused(self):
-		os.environ[accounts.ENV_VAR] = "personal,spare"
+		os.environ[accounts.ACCOUNTS_ENV_VAR] = "personal,spare"
 
 		with self.assertRaises(ValueError) as caught:
 			signin.account_to_sign_in()
@@ -98,7 +96,7 @@ class TestAccountSelection(EnvironmentTestCase):
 		# "..." is data-dir itself once Win32 strips the trailing dot. If this
 		# resolved, a sign-in would write the default profile under a name that
 		# reads as a separate account.
-		os.environ[accounts.ENV_VAR] = "..."
+		os.environ[accounts.ACCOUNTS_ENV_VAR] = "..."
 
 		with self.assertRaises(ValueError):
 			signin.account_to_sign_in()
@@ -194,7 +192,7 @@ class TestCleanShutdown(EnvironmentTestCase):
 	def setUp(self):
 		super().setUp()
 
-		os.environ[accounts.ENV_VAR] = "shutdown_probe"
+		os.environ[accounts.ACCOUNTS_ENV_VAR] = "shutdown_probe"
 		self.account = signin.account_to_sign_in()
 		self.addCleanup(shutil.rmtree, self.account.user_data_dir, ignore_errors=True)
 

@@ -5,7 +5,5 @@ from os.path import abspath, dirname, join
 # C:\WINDOWS\system32) still finds the profile and the repo's own files.
 REPO_ROOT = dirname(dirname(abspath(__file__)))
 
-USER_DATA_DIR = join(REPO_ROOT, "data-dir")
-PROFILE_NAME = "Default"
-
+DEFAULT_ROOT_DATA_DIR = join(REPO_ROOT, "data-dir")
 DOTENV_PATH = join(REPO_ROOT, ".env")

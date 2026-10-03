@@ -30,7 +30,6 @@ from selenium.common.exceptions import (
 import accounts
 import browser
 import main
-from constants import USER_DATA_DIR
 
 # Names that have to be refused, with the reason each one is not simply a
 # directory sitting under data-dir.
@@ -52,9 +51,9 @@ REFUSED_NAMES = [
 def accounts_for(value):
 	"""configured() under a given REWARDS_ACCOUNTS, or ValueError."""
 	if value is None:
-		os.environ.pop(accounts.ENV_VAR, None)
+		os.environ.pop(accounts.ACCOUNTS_ENV_VAR, None)
 	else:
-		os.environ[accounts.ENV_VAR] = value
+		os.environ[accounts.ACCOUNTS_ENV_VAR] = value
 
 	return accounts.configured()
 
@@ -63,7 +62,7 @@ class EnvironmentTestCase(unittest.TestCase):
 	"""Restores everything these tests reach into, so ordering cannot matter."""
 
 	def setUp(self):
-		self.addCleanup(os.environ.pop, accounts.ENV_VAR, None)
+		self.addCleanup(os.environ.pop, accounts.ACCOUNTS_ENV_VAR, None)
 
 
 class TestAccountConfiguration(EnvironmentTestCase):
@@ -71,7 +70,7 @@ class TestAccountConfiguration(EnvironmentTestCase):
 		configured = accounts_for(None)
 
 		self.assertEqual([a.name for a in configured], ["default"])
-		self.assertEqual(configured[0].user_data_dir, USER_DATA_DIR)
+		self.assertEqual(configured[0].user_data_dir, os.environ.get(accounts.DATA_DIR_ENV_VAR, accounts.DEFAULT_ROOT_DATA_DIR))
 		self.assertTrue(configured[0].is_default)
 
 	def test_blank_falls_back_to_the_single_profile(self):
@@ -110,7 +109,7 @@ class TestAccountConfiguration(EnvironmentTestCase):
 		self.assertEqual(len({os.path.realpath(a.user_data_dir) for a in named}), 2)
 
 	def test_every_directory_sits_under_the_profile_directory(self):
-		root = os.path.realpath(USER_DATA_DIR)
+		root = os.path.realpath(os.environ.get(accounts.DATA_DIR_ENV_VAR, accounts.DEFAULT_ROOT_DATA_DIR))
 
 		for account in accounts_for("personal,spare"):
 			with self.subTest(account=account.name):

@@ -73,9 +73,9 @@ def account_to_sign_in() -> accounts.Account:
 		names = ", ".join(account.name for account in configured)
 
 		raise ValueError(
-			f"sign in one account at a time; {accounts.ENV_VAR} names {names}. "
+			f"sign in one account at a time; {accounts.ACCOUNTS_ENV_VAR} names {names}. "
 			f"Run this once per name, starting with "
-			f"{accounts.ENV_VAR}={configured[0].name}"
+			f"{accounts.ACCOUNTS_ENV_VAR}={configured[0].name}"
 		)
 
 	return configured[0]

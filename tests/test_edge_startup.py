@@ -30,11 +30,10 @@ import browser
 import check_selectors
 import log_utils
 import main
-from constants import USER_DATA_DIR, PROFILE_NAME
 
 REPO_ROOT = os.path.realpath(os.path.join(SRC, ".."))
 
-ACCOUNT = accounts.Account(name="default", user_data_dir=USER_DATA_DIR, profile_name=PROFILE_NAME)
+ACCOUNT = accounts.get_default_account()
 
 ENV_VARS = ("MSEDGEDRIVER_PATH", "EDGE_BINARY", "REWARDS_DRIVER_LOG")
 
@@ -111,7 +110,7 @@ class TestStartupFailures(EnvTestCase):
 
 				output = "\n".join(logs.output)
 				self.assertIn(phrase, output)
-				self.assertIn(USER_DATA_DIR, output)
+				self.assertIn(os.environ.get(accounts.DATA_DIR_ENV_VAR, accounts.DEFAULT_ROOT_DATA_DIR), output)
 
 	def test_only_the_lock_message_blames_an_open_window(self):
 		for exc, phrase in FAILURES:
@@ -178,7 +177,7 @@ class TestDriverEnvironment(EnvTestCase):
 	def test_the_account_profile_is_passed(self):
 		browser.start_driver(ACCOUNT)
 
-		self.assertIn(f"--user-data-dir={USER_DATA_DIR}", self.seen["options"].arguments)
+		self.assertIn(f"--user-data-dir={os.environ.get(accounts.DATA_DIR_ENV_VAR, accounts.DEFAULT_ROOT_DATA_DIR)}", self.seen["options"].arguments)
 
 
 class TestPathsIgnoreTheWorkingDirectory(unittest.TestCase):
@@ -186,7 +185,6 @@ class TestPathsIgnoreTheWorkingDirectory(unittest.TestCase):
 
 	PROBE = (
 		"import constants, rewards_tasks, llm_utils, query_sources, random_image_for_visual_search as r\n"
-		"print(constants.USER_DATA_DIR)\n"
 		"print(rewards_tasks.VISUAL_SEARCH_IMAGE_PATH)\n"
 		"print(r.OUTPUT_FILE)\n"
 		"print(r.METADATA_FILE)\n"
@@ -206,9 +204,8 @@ class TestPathsIgnoreTheWorkingDirectory(unittest.TestCase):
 
 		self.assertEqual(result.returncode, 0, result.stderr)
 
-		data_dir, image, output, metadata, nouns, queries = result.stdout.splitlines()
+		image, output, metadata, nouns, queries = result.stdout.splitlines()
 
-		self.assertEqual(os.path.realpath(data_dir), os.path.join(REPO_ROOT, "data-dir"))
 		self.assertEqual(os.path.realpath(image), os.path.join(REPO_ROOT, "visual_search.jpg"))
 		self.assertEqual(os.path.realpath(output), os.path.join(REPO_ROOT, "visual_search.jpg"))
 		self.assertEqual(os.path.realpath(metadata), os.path.join(REPO_ROOT, "visual_search.json"))

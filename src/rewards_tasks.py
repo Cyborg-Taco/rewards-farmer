@@ -39,7 +39,7 @@ class ElementNeverAppeared(TimeoutException):
 	"""
 
 
-def task_failure_report(exc: BaseException) -> tuple[str, str]:
+def task_failure_report(exc: BaseException, progress: str | None = None) -> tuple[str, str]:
 	"""The tag and the reason a failed task is reported with.
 
 	Absence and an expired wait need different next steps. A section this market
@@ -47,23 +47,39 @@ def task_failure_report(exc: BaseException) -> tuple[str, str]:
 	on the page and never became usable may have left points behind, so it is
 	reported as a failure instead of being folded into the same sentence.
 
+	progress is what the task had already done when it stopped. A task that got
+	that far was on the page, so an element missing after that point is not
+	absence either. It is a failure with work left over, and the reason starts
+	with how far it got.
+
 	Ordered from the most specific case outwards, not by exception hierarchy:
 	ElementNeverAppeared is a TimeoutException and ElementNotReady is a
 	NoSuchElementException, so each has to be tested before the class it
 	refines.
 	"""
-	unavailable = f"not available in this UI variant ({type(exc).__name__})"
+	name = type(exc).__name__
 
+	# No cause means nothing matched at all, which is only absence when the
+	# task had not got anywhere yet.
 	if isinstance(exc, ElementNeverAppeared):
-		return "SKIP", unavailable
+		cause = None
+	elif isinstance(exc, (element_selectors.ElementNotReady, TimeoutException)):
+		cause = f"on the page but not ready in time ({name})"
+	elif isinstance(exc, NoSuchElementException):
+		cause = None
+	else:
+		cause = f"{name}: {log_utils.exception_summary(exc)}"
 
-	if isinstance(exc, (element_selectors.ElementNotReady, TimeoutException)):
-		return "FAIL", f"on the page but not ready in time ({type(exc).__name__})"
+	if progress is None:
+		if cause is None:
+			return "SKIP", f"not available in this UI variant ({name})"
 
-	if isinstance(exc, NoSuchElementException):
-		return "SKIP", unavailable
+		return "FAIL", cause
 
-	return "FAIL", f"{type(exc).__name__}: {log_utils.exception_summary(exc)}"
+	if cause is None:
+		cause = f"the next element never appeared ({name})"
+
+	return "FAIL", f"{progress}, then {cause}"
 
 
 class RewardsTaskUtils:
@@ -89,6 +105,10 @@ class RewardsTaskUtils:
 		# because "the current tab" stops meaning this one the moment a task
 		# opens a card in a new one.
 		self.main_window = driver.current_window_handle
+
+		# How far the running task got, for the report if it stops part way.
+		# complete_all_tasks clears it before each task.
+		self.progress: str | None = None
 
 		self.mouse = mouse_trajectory.MouseUtils(driver)
 		self.keyboard = mimic_typing.KeyboardUtils(driver)
@@ -180,6 +200,7 @@ class RewardsTaskUtils:
 		self.switch_to_earn_page()
 
 		self.wait_for_then_click(self.elements.get_open_daily_set_button)
+		self.progress = "opened the panel"
 
 		# The panel hydrates progressively, so the first non-empty snapshot can
 		# hold fewer than 3 activities. wait_for_element returns on the first
@@ -202,6 +223,7 @@ class RewardsTaskUtils:
 			)
 
 		main_tab = self.driver.current_window_handle
+		opened = 0
 
 		# Re-read the panel per index immediately before interaction: clicking an activity can re-render it and
 		# stale the captured references.
@@ -214,6 +236,9 @@ class RewardsTaskUtils:
 			except Exception as exc:
 				logger.warning("Failed to click daily set activity %d: %s", index + 1, exc)
 				continue
+
+			opened += 1
+			self.progress = f"opened {opened} of {len(daily_set_links)} activities"
 
 			time.sleep(random.uniform(2, 3))
 			self.tab_utils.close_all_other_tabs(exceptions=[main_tab])
@@ -232,7 +257,10 @@ class RewardsTaskUtils:
 			# must not produce.
 			raise NoSuchElementException("no Explore on Bing section in this UI variant")
 
-		for card in explore_on_bing_links:
+		total = len(explore_on_bing_links)
+		self.progress = f"searched 0 of {total} cards"
+
+		for number, card in enumerate(explore_on_bing_links, start=1):
 			desc = self.elements.extract_card_descriptions(card)
 			query = queries.search_query_for_task(desc)
 
@@ -249,6 +277,8 @@ class RewardsTaskUtils:
 
 			self.tab_utils.switch_to_other_tab()
 			self.tab_utils.close_all_other_tabs()
+
+			self.progress = f"searched {number} of {total} cards"
 
 		time.sleep(random.uniform(1, 2)) # allow card statuses to update
 
@@ -268,16 +298,19 @@ class RewardsTaskUtils:
 			random_image_for_visual_search.get_random_image()
 
 		self.wait_for_then_click(self.elements.get_open_visual_search_sidebar)
+		self.progress = "opened the sidebar"
 
 		self.wait_for_then_click(self.elements.get_search_now_link_from_visual_search_sidebar)
 
 		self.tab_utils.switch_to_other_tab()
+		self.progress = "opened the visual search page"
 
 		self.wait_for_then_click(self.elements.get_visual_search_button)
 
 		file_input = self.wait_for_element(self.elements.get_visual_search_file_input)
 
 		file_input.send_keys(VISUAL_SEARCH_IMAGE_PATH)
+		self.progress = "uploaded the image"
 
 		time.sleep(random.uniform(3, 5))
 
@@ -290,6 +323,9 @@ class RewardsTaskUtils:
 
 		misc_cards: list[WebElement] = self.wait_for_element(self.elements.get_all_misc_cards)
 
+		opened = 0
+		self.progress = "opened 0 cards"
+
 		for index in range(len(misc_cards)):
 			cards = self.elements.get_all_misc_cards()
 			if index >= len(cards):
@@ -301,6 +337,10 @@ class RewardsTaskUtils:
 
 				if not self.elements.card_is_complete(card) and self.elements.get_card_point_value(card) > 0:
 					self.move_to_and_click(card)
+
+					opened += 1
+					self.progress = f"opened {opened} {'card' if opened == 1 else 'cards'}"
+
 					time.sleep(random.uniform(1, 2))
 					self.tab_utils.close_all_other_tabs(exceptions=[main_tab])
 			except Exception as exc:
@@ -329,6 +369,9 @@ class RewardsTaskUtils:
 
 		logger.info("Search points before: %s/%s", points_earned, max_pts)
 
+		sent = 0
+		self.progress = "sent 0 searches"
+
 		for round_number in range(1, max_rounds + 1):
 			if points_earned >= max_pts:
 				break
@@ -336,14 +379,15 @@ class RewardsTaskUtils:
 			# Assume the lower known rate so a round never overshoots by much.
 			searches = max(1, (max_pts - points_earned) // 3)
 
-			self.run_search_batch(searches)
+			batch = self.run_search_batch(searches, already_sent=sent)
+			sent += batch
 
 			previous = points_earned
 			points_earned, max_pts = self.read_search_points()
 
 			logger.info(
 				"Round %s: %s searches -> %s/%s",
-				round_number, searches, points_earned, max_pts
+				round_number, batch, points_earned, max_pts
 			)
 
 			if points_earned <= previous:
@@ -382,7 +426,12 @@ class RewardsTaskUtils:
 
 		return points_earned, max_pts
 
-	def run_search_batch(self, count: int):
+	def run_search_batch(self, count: int, already_sent: int = 0) -> int:
+		"""Search up to count queries and return how many actually went out.
+
+		The trends source can come back with fewer queries than asked for, so
+		the caller cannot assume count.
+		"""
 		self.driver.get("https://www.bing.com/")
 		self.tab_utils.ensure_focus()
 
@@ -390,10 +439,15 @@ class RewardsTaskUtils:
 
 		# search bar should be auto-focused
 
+		sent_here = 0
+
 		for i, query in enumerate(
 			queries.related_queries(count)
 		):
 			self.keyboard.send_keys(f"{query} -noai{Keys.ENTER}")
+			sent_here = i + 1
+			sent = already_sent + sent_here
+			self.progress = f"sent {sent} {'search' if sent == 1 else 'searches'}"
 
 			time.sleep(random.uniform(5.5, 7.5))
 
@@ -407,6 +461,8 @@ class RewardsTaskUtils:
 
 		self.driver.get(REWARDS_HOME_URL)
 		self.tab_utils.ensure_focus()
+
+		return sent_here
 
 	def restore_main_tab(self):
 		"""Close the stray tabs, keeping the one the tasks work in.
@@ -460,6 +516,7 @@ class RewardsTaskUtils:
 		self.switch_to_dashboard()
 
 		self.wait_for_then_click(self.elements.get_bonus_button_on_dashboard)
+		self.progress = "opened the bonus panel"
 
 		try:
 			self.wait_for_then_click(self.elements.get_claim_bonus_points_button)
@@ -485,12 +542,16 @@ class RewardsTaskUtils:
 			# means scanning for them.
 			completed = False
 
+			# Cleared per task, so how far one task got cannot turn the next
+			# one's absence into a failure.
+			self.progress = None
+
 			try:
 				step()
 				logger.info("[OK] %s", name)
 				completed = True
 			except Exception as exc:
-				tag, reason = task_failure_report(exc)
+				tag, reason = task_failure_report(exc, self.progress)
 
 				logger.log(
 					logging.WARNING if tag == "SKIP" else logging.ERROR,

@@ -13,6 +13,7 @@ Paste the output into a bug report. Absent is a normal result for a task the
 variant does not ship. FAILED is what needs fixing.
 """
 
+import os
 import sys
 import time
 
@@ -22,7 +23,6 @@ import accounts
 import browser
 import element_selectors
 import log_utils
-from constants import USER_DATA_DIR, PROFILE_NAME
 
 RENDER_TIMEOUT = 60
 
@@ -115,7 +115,7 @@ def main():
 	log_utils.setup_logging()
 
 	driver = browser.start_driver(
-		accounts.Account(name="default", user_data_dir=USER_DATA_DIR, profile_name=PROFILE_NAME)
+		accounts.get_default_account()
 	)
 
 	if driver is None:

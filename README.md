@@ -23,51 +23,8 @@ Clone the repository.
 
 ```sh
 git clone https://github.com/User0332/rewards-farmer
-```
-
-A sample `nouns.txt` file is included in the project root and can be modified by the user to contain seed words for the LLM to complete 20 searches. The wordlist should be separated by newline.
-
-```sh
 cd rewards-farmer
-# Edit the included nouns.txt file to add or replace words as needed
 ```
-
-### Where search queries come from
-
-The bot needs short strings to type into Bing. Two backends produce them, set with `QUERY_SOURCE`:
-
-| `QUERY_SOURCE` | Needs | Notes |
-| --- | --- | --- |
-| `llm` (default) | OpenRouter or Ollama account + model | `llm` via Ollama is the current behaviour, unchanged |
-| `trends` | nothing | Google Trends, Wikipedia and Bing autosuggest |
-
-```sh
-QUERY_SOURCE=trends python src/main.py          # bash
-$env:QUERY_SOURCE="trends"; python src/main.py  # PowerShell
-```
-
-`trends` needs no account, no API key and no model download, so the LLM setup below is optional if you use it. If every feed is unreachable it falls back to `nouns.txt` rather than failing the run.
-
-If you would like to use LLMs, you should also configure an LLM provider through a `.env` file in the project root. The script now talks to either OpenRouter or a local OpenAI-compatible LLM endpoint depending on `LLM_PROVIDER`.
-
-Example `.env` values:
-
-```env
-LLM_PROVIDER=openrouter
-OPENROUTER_API_KEY=your_key_here
-OPENROUTER_MODEL=openai/gpt-4o-mini
-
-# Or use a local endpoint instead
-# LLM_PROVIDER=local
-# LOCAL_LLM_BASE_URL=http://localhost:11434/v1
-# LOCAL_LLM_MODEL=gemma3:4b
-```
-
-For OpenRouter, the code uses the OpenAI-compatible chat completions API at `https://openrouter.ai/api/v1/chat/completions`. For local models, the endpoint must also be OpenAI-compatible. More configuration options can be found in [`.env.example`](.env.example).
-
-If the configuration options are not provided, they default to `LLM_PROVIDER=local`, `LOCAL_LLM_BASE_URL=http://localhost:11434/v1`, `LOCAL_LLM_MODEL=gemma4:cloud`, and `OPENROUTER_MODEL=openrouter/free`.
-
-You must also provide an image for the script to upload to complete the visual search task. A helper script is included at `src/random_image_for_visual_search.py` that will download an image from Wikipedia named `visual_search.jpg` into the project root for you. You may also provide an image of your own, just ensure that the absolute path of the image is placed in the `VISUAL_SEARCH_IMAGE_PATH` constant at the top of `rewards_tasks.py`.
 
 ### Installing Dependencies
 
@@ -91,6 +48,49 @@ eval $(poetry env activate)
 ```
 
 You must also have a [webdriver for Microsoft Edge](https://learn.microsoft.com/en-us/microsoft-edge/webdriver/?tabs=c-sharp) installed. If you already have the Edge Browser installed, you probably have this component as well.
+
+### Configuration Script
+
+At this point you can run the config script using `python src/init-config.py`, which will walk you through the available configuration options. However, it is still recommended that you continue reading the rest of this README before doing so to fully understand each option.
+
+### Where search queries come from
+
+The bot needs short strings to type into Bing. Two backends produce them, set with `QUERY_SOURCE`:
+
+| `QUERY_SOURCE` | Needs | Notes |
+| --- | --- | --- |
+| `llm` (default) | OpenRouter or Ollama account + model | `llm` via Ollama is the current behaviour, unchanged |
+| `trends` | nothing | Google Trends, Wikipedia and Bing autosuggest |
+
+```sh
+QUERY_SOURCE=trends python src/main.py          # bash
+$env:QUERY_SOURCE="trends"; python src/main.py  # PowerShell
+```
+
+`trends` needs no account, no API key and no model download, so the LLM setup below is optional if you use it. If every feed is unreachable it falls back to `nouns.txt` rather than failing the run.
+
+If you would like to use LLMs, you should also configure an LLM provider through a `.env` file in the project root. The script now talks to either OpenRouter or a local OpenAI-compatible LLM endpoint depending on `LLM_PROVIDER`.
+
+A sample `nouns.txt` file is included in the project root and can be modified by the user to contain seed words for an LLM to complete 20 searches. The wordlist should be separated by newline.
+
+Example `.env` values:
+
+```env
+LLM_PROVIDER=openrouter
+OPENROUTER_API_KEY=your_key_here
+OPENROUTER_MODEL=openai/gpt-4o-mini
+
+# Or use a local endpoint instead
+# LLM_PROVIDER=local
+# LOCAL_LLM_BASE_URL=http://localhost:11434/v1
+# LOCAL_LLM_MODEL=gemma3:4b
+```
+
+For OpenRouter, the code uses the OpenAI-compatible chat completions API at `https://openrouter.ai/api/v1/chat/completions`. For local models, the endpoint must also be OpenAI-compatible. More configuration options can be found in [`.env.example`](.env.example).
+
+If the configuration options are not provided, they default to `LLM_PROVIDER=local`, `LOCAL_LLM_BASE_URL=http://localhost:11434/v1`, `LOCAL_LLM_MODEL=gemma4:cloud`, and `OPENROUTER_MODEL=openrouter/free`.
+
+You must also provide an image for the script to upload to complete the visual search task. A helper script is included at `src/random_image_for_visual_search.py` that will download an image from Wikipedia named `visual_search.jpg` into the project root for you. You may also provide an image of your own, just ensure that the absolute path of the image is placed in the `VISUAL_SEARCH_IMAGE_PATH` constant at the top of `rewards_tasks.py`.
 
 ### Profile Setup
 
