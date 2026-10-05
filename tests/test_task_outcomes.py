@@ -347,6 +347,10 @@ def wait_once(getter, timeout=10):
 	"""wait_for_element without the waiting: one look, then the same verdict."""
 	try:
 		found = getter()
+	except ElementNotReady as exc:
+		# There but still rendering, which the real wait lets out as the
+		# plain TimeoutException.
+		raise TimeoutException(str(exc)) from exc
 	except NoSuchElementException as exc:
 		raise ElementNeverAppeared(str(exc)) from exc
 
@@ -427,6 +431,57 @@ class ProgressInsideTasks(unittest.TestCase):
 		output = self._report(tasks, "complete_explore_on_bing_tasks")
 
 		self.assertIn("[SKIP] Explore on Bing: not available in this UI variant", output)
+
+	def test_explore_on_bing_without_a_section_is_not_kept_waiting(self):
+		# Most accounts do not have the section. Asking once is enough there,
+		# a wait would only add its length to every run.
+		tasks = self._tasks(get_explore_on_bing_elements=lambda: [])
+		waited = []
+		tasks.wait_for_element = lambda getter, timeout=10: waited.append(getter)
+
+		self._report(tasks, "complete_explore_on_bing_tasks")
+
+		self.assertEqual(waited, [])
+
+	def _explore_rendering(self, ready_after):
+		"""Explore on Bing on a page whose section renders after ready_after looks."""
+		looks = []
+
+		def explore():
+			looks.append(1)
+
+			if len(looks) <= ready_after:
+				raise ElementNotReady("'exploreonbing' is present but no visible copy has content yet")
+
+			return ["card 1"]
+
+		tasks = self._tasks(
+			get_explore_on_bing_elements=explore,
+			extract_card_descriptions=lambda card: card,
+			get_bing_search_bar=lambda: "search bar",
+			card_is_complete=lambda card: True,
+		)
+		tasks.wait_for_element = wait_once
+
+		return tasks
+
+	def test_explore_on_bing_waits_for_a_section_that_is_still_rendering(self):
+		tasks = self._explore_rendering(ready_after=1)
+
+		with mock.patch.object(rewards_tasks.queries, "search_query_for_task", lambda desc: "query"):
+			output = self._report(tasks, "complete_explore_on_bing_tasks")
+
+		self.assertIn("[OK] Explore on Bing", output)
+
+	def test_explore_on_bing_that_never_finishes_rendering_is_a_failure(self):
+		tasks = self._explore_rendering(ready_after=99)
+
+		output = self._report(tasks, "complete_explore_on_bing_tasks")
+
+		self.assertIn(
+			"[FAIL] Explore on Bing: on the page but not ready in time (TimeoutException)",
+			output,
+		)
 
 	def _visual_search(self, link=None, done_today=False):
 		"""The visual search task with its sidebar open.

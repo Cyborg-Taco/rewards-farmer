@@ -248,7 +248,13 @@ class RewardsTaskUtils:
 	def complete_explore_on_bing_tasks(self):
 		self.switch_to_earn_page()
 
-		explore_on_bing_links = self.elements.get_explore_on_bing_elements()
+		# Asked once first, so an account without the section moves on at once
+		# instead of sitting out a wait. Only a section that is there and still
+		# rendering gets the wait.
+		try:
+			explore_on_bing_links = self.elements.get_explore_on_bing_elements()
+		except element_selectors.ElementNotReady:
+			explore_on_bing_links = self.wait_for_element(self.elements.get_explore_on_bing_elements)
 
 		if not explore_on_bing_links:
 			# Raise rather than return, so complete_all_tasks reports this as
