@@ -24,7 +24,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 import mouse_trajectory
 from mouse_trajectory import (
 	MouseUtils,
+	choose_target_in_element,
 	get_final_path_from_real_time,
+	get_movement_time_from_fitts_law,
 	logistic_sigmoid,
 )
 
@@ -140,6 +142,66 @@ class MoveMouseLandsOnTheTarget(unittest.TestCase):
 
 		self.assertTrue(driver.locations, "the pointer was never moved at all")
 		self.assertEqual(driver.locations[-1], end)
+
+
+class FakeMoveDriver(FakeMouseDriver):
+	"""Also answers the scripts move_to_element runs before it moves."""
+
+	def __init__(self, cursor, rect):
+		super().__init__()
+		self.cursor = cursor
+		self.rect = rect
+
+	def execute_script(self, script, *args):
+		if "cursorX" in script:
+			return {"x": self.cursor[0], "y": self.cursor[1]}
+
+		if "r.top >= 0" in script:
+			# Already in view, so nothing scrolls.
+			return True
+
+		if "rect.width" in script:
+			return dict(self.rect)
+
+		return super().execute_script(script, *args)
+
+
+class MoveWhenAlreadyOnTheTarget(unittest.TestCase):
+	"""A second click on the same control can pick the point the pointer is on.
+
+	The search loop clicks the same clear button after every query, and since
+	the move ends on the chosen point a repeat pick means a distance of 0.
+	log2(0) raised ValueError and took the search task down with it.
+	"""
+
+	def setUp(self):
+		self._real_builder = mouse_trajectory.ActionBuilder
+		mouse_trajectory.ActionBuilder = RecordingActionBuilder
+
+	def tearDown(self):
+		mouse_trajectory.ActionBuilder = self._real_builder
+
+	def test_no_distance_takes_no_time(self):
+		self.assertEqual(get_movement_time_from_fitts_law(0, 20), 0.0)
+
+	def test_a_distance_still_follows_fitts_law(self):
+		self.assertGreater(get_movement_time_from_fitts_law(300, 20), 0.0)
+
+	def test_clicking_where_the_pointer_already_is_lands_there(self):
+		rect = {"x": 300, "y": 200, "width": 24, "height": 24}
+
+		# The point this click is going to pick, so the pointer can be left
+		# there first, the way the previous click on the same button leaves it.
+		random.seed(5)
+		target = choose_target_in_element(rect["x"], rect["y"], rect["height"], rect["width"])
+		random.seed(5)
+
+		driver = FakeMoveDriver(cursor=target, rect=rect)
+		mouse = make_mouse_utils(driver)
+
+		mouse.move_to_element(element=None, visualize=False)
+
+		self.assertEqual(driver.locations[-1], target)
 
 
 if __name__ == "__main__":

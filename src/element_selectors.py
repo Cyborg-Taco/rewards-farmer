@@ -39,6 +39,10 @@ class Labels:
 	# The full streak label on purpose: plain "visual search" also matches an
 	# element on the dashboard, which can go stale mid-interaction.
 	VISUAL_SEARCH_STREAK = "visual search streak"
+	# The link out to Bing in the visual search panel. On an account that has
+	# never done a visual search the same link reads "Activate streak" (#80).
+	VISUAL_SEARCH_NOW = "search now"
+	VISUAL_SEARCH_ACTIVATE = "activate streak"
 
 
 class ElementSelectionUtils:
@@ -256,8 +260,16 @@ class ElementSelectionUtils:
 	# ------------------------------------------------------------------
 
 	def get_explore_on_bing_elements(self):
+		"""The cards of the Explore on Bing section, or [] when it is not there.
+
+		A section that is on the page and still rendering raises ElementNotReady
+		instead of coming back as [], so the task can wait for it rather than
+		report a market that does not ship it.
+		"""
 		try:
 			container = self._container_by_id("exploreonbing")
+		except ElementNotReady:
+			raise
 		except NoSuchElementException:
 			return []
 
@@ -278,16 +290,40 @@ class ElementSelectionUtils:
 	def get_search_now_link_from_visual_search_sidebar(self):
 		sidebar = self.get_sidebar_section()
 
-		try:
-			return self._link_containing("search now", sidebar)
-		except NoSuchElementException:
-			# Fall back to the original positional behaviour.
-			links = sidebar.find_elements(By.TAG_NAME, "a")
+		for label in (Labels.VISUAL_SEARCH_NOW, Labels.VISUAL_SEARCH_ACTIVATE):
+			try:
+				return self._link_containing(label, sidebar)
+			except NoSuchElementException:
+				continue
 
-			if len(links) < 2:
-				raise NoSuchElementException("visual search sidebar has no usable link")
+		# Fall back to the original positional behaviour.
+		links = sidebar.find_elements(By.TAG_NAME, "a")
 
-			return links[1]
+		if len(links) < 2:
+			raise NoSuchElementException("visual search sidebar has no usable link")
+
+		return links[1]
+
+	def visual_search_done_today(self) -> bool:
+		"""Whether the panel shows today's visual search as done.
+
+		Once it is, search now stops being a link. It is rendered as a span with
+		role="link" and aria-disabled="true", and the panel has no <a> left at
+		all, so waiting for the link runs out however long it waits.
+		"""
+		sidebar = self.get_sidebar_section()
+
+		for control in sidebar.find_elements(By.CSS_SELECTOR, '[role="link"]'):
+			try:
+				if (
+					control.get_dom_attribute("aria-disabled") == "true"
+					and Labels.VISUAL_SEARCH_NOW in (control.text or "").lower()
+				):
+					return True
+			except StaleElementReferenceException:
+				continue
+
+		return False
 
 	def get_visual_search_button(self):
 		return self.driver.find_element(By.CSS_SELECTOR, "#sb_form > div.camera.icon")
