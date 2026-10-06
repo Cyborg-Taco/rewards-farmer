@@ -177,6 +177,30 @@ class DuplicatedContainer(unittest.TestCase):
 		self.assertNotIsInstance(caught.exception, element_selectors.ElementNotReady)
 
 
+class ExploreOnBingSection(unittest.TestCase):
+	"""Absence and a section still rendering used to come back as the same []."""
+
+	def _driver(self, displayed, links):
+		section = FakeElement(
+			displayed=displayed,
+			children={(By.TAG_NAME, "a"): [FakeElement(text=f"card {i}") for i in range(links)]},
+		)
+
+		return FakeDriver(children={(By.ID, "exploreonbing"): [section]})
+
+	def test_a_market_without_the_section_gets_no_cards(self):
+		self.assertEqual(selectors_for(FakeDriver()).get_explore_on_bing_elements(), [])
+
+	def test_a_section_still_rendering_is_not_reported_as_missing(self):
+		with self.assertRaises(element_selectors.ElementNotReady):
+			selectors_for(self._driver(displayed=True, links=0)).get_explore_on_bing_elements()
+
+	def test_a_rendered_section_gives_its_cards(self):
+		cards = selectors_for(self._driver(displayed=True, links=3)).get_explore_on_bing_elements()
+
+		self.assertEqual(len(cards), 3)
+
+
 class DailySetOpener(unittest.TestCase):
 	"""The opener label has to be distinguished from the level up entry."""
 

@@ -260,8 +260,16 @@ class ElementSelectionUtils:
 	# ------------------------------------------------------------------
 
 	def get_explore_on_bing_elements(self):
+		"""The cards of the Explore on Bing section, or [] when it is not there.
+
+		A section that is on the page and still rendering raises ElementNotReady
+		instead of coming back as [], so the task can wait for it rather than
+		report a market that does not ship it.
+		"""
 		try:
 			container = self._container_by_id("exploreonbing")
+		except ElementNotReady:
+			raise
 		except NoSuchElementException:
 			return []
 
