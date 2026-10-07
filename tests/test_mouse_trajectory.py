@@ -204,5 +204,70 @@ class MoveWhenAlreadyOnTheTarget(unittest.TestCase):
 		self.assertEqual(driver.locations[-1], target)
 
 
+class BusyPageDriver(FakeMouseDriver):
+	"""A page that does not run the cursor overlay script in time.
+
+	overlay_timeouts is how many times adding the overlay runs into the script
+	timeout before the page keeps up. Moving the overlay fails the way it does
+	in a browser while the overlay is not there.
+	"""
+
+	def __init__(self, overlay_timeouts):
+		super().__init__()
+		self.overlay_timeouts = overlay_timeouts
+		self.overlay_added = False
+
+	def execute_script(self, script, *args):
+		if "selenium-visual-cursor" in script and "createElement" in script:
+			if self.overlay_timeouts > 0:
+				self.overlay_timeouts -= 1
+				raise mouse_trajectory.TimeoutException("script timeout")
+
+			self.overlay_added = True
+
+			return None
+
+		if "moveVisualCursor" in script and not self.overlay_added:
+			raise mouse_trajectory.JavascriptException("window.moveVisualCursor is not a function")
+
+		return super().execute_script(script, *args)
+
+
+class CursorOverlayOnABusyPage(unittest.TestCase):
+	"""The overlay is cosmetic, so a page too busy to add it must not end the run.
+
+	It was added in MouseUtils.__init__, which RewardsTaskUtils builds before
+	the first task, so its script timeout took every task of the run with it.
+	"""
+
+	def setUp(self):
+		self._real_builder = mouse_trajectory.ActionBuilder
+		mouse_trajectory.ActionBuilder = RecordingActionBuilder
+
+	def tearDown(self):
+		mouse_trajectory.ActionBuilder = self._real_builder
+
+	def test_a_busy_page_does_not_stop_the_setup(self):
+		driver = BusyPageDriver(overlay_timeouts=1)
+
+		with self.assertLogs(mouse_trajectory.logger, level="WARNING") as captured:
+			MouseUtils(driver)
+
+		self.assertIn("cursor overlay not added", "\n".join(captured.output))
+		self.assertFalse(driver.overlay_added)
+
+	def test_the_first_move_adds_the_overlay_once_the_page_keeps_up(self):
+		driver = BusyPageDriver(overlay_timeouts=1)
+
+		with self.assertLogs(mouse_trajectory.logger, level="WARNING"):
+			mouse = MouseUtils(driver)
+
+		start, end = (200, 200), (600, 450)
+		mouse.move_mouse(BRIEF_MOVE, get_final_path_from_real_time(BRIEF_MOVE, start, end), visualize=True)
+
+		self.assertTrue(driver.overlay_added)
+		self.assertEqual(driver.locations[-1], end)
+
+
 if __name__ == "__main__":
 	unittest.main()
