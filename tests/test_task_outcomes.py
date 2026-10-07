@@ -21,6 +21,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from selenium.common.exceptions import (
 	NoSuchElementException,
+	StaleElementReferenceException,
 	TimeoutException,
 	WebDriverException,
 )
@@ -482,6 +483,40 @@ class ProgressInsideTasks(unittest.TestCase):
 			"[FAIL] Explore on Bing: on the page but not ready in time (TimeoutException)",
 			output,
 		)
+
+	def test_explore_on_bing_survives_the_section_rendering_again(self):
+		# #102: coming back from each search tab re-renders the section, so a
+		# card read before the first search is stale by the second click.
+		render = [0]
+		clicked = []
+
+		def cards():
+			return [(f"card {i}", render[0]) for i in range(1, 4)]
+
+		def click(card):
+			if card[1] != render[0]:
+				raise StaleElementReferenceException("stale element not found in the current frame")
+
+			clicked.append(card[0])
+
+		def back_on_the_earn_page(exceptions=None):
+			render[0] += 1
+
+		tasks = self._tasks(
+			get_explore_on_bing_elements=cards,
+			extract_card_descriptions=lambda card: card[0],
+			get_bing_search_bar=lambda: "search bar",
+			card_is_complete=lambda card: True,
+		)
+		tasks.move_to_and_click = click
+		tasks.tab_utils.close_all_other_tabs = back_on_the_earn_page
+		tasks.wait_for_element = wait_once
+
+		with mock.patch.object(rewards_tasks.queries, "search_query_for_task", lambda desc: "query"):
+			output = self._report(tasks, "complete_explore_on_bing_tasks")
+
+		self.assertEqual(clicked, ["card 1", "card 2", "card 3"])
+		self.assertIn("[OK] Explore on Bing", output)
 
 	def _visual_search(self, link=None, done_today=False):
 		"""The visual search task with its sidebar open.

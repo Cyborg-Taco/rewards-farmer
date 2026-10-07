@@ -245,16 +245,19 @@ class RewardsTaskUtils:
 
 		self.tab_utils.close_all_other_tabs(exceptions=[main_tab])
 
-	def complete_explore_on_bing_tasks(self):
-		self.switch_to_earn_page()
-
+	def _explore_on_bing_cards(self):
 		# Asked once first, so an account without the section moves on at once
 		# instead of sitting out a wait. Only a section that is there and still
 		# rendering gets the wait.
 		try:
-			explore_on_bing_links = self.elements.get_explore_on_bing_elements()
+			return self.elements.get_explore_on_bing_elements()
 		except element_selectors.ElementNotReady:
-			explore_on_bing_links = self.wait_for_element(self.elements.get_explore_on_bing_elements)
+			return self.wait_for_element(self.elements.get_explore_on_bing_elements)
+
+	def complete_explore_on_bing_tasks(self):
+		self.switch_to_earn_page()
+
+		explore_on_bing_links = self._explore_on_bing_cards()
 
 		if not explore_on_bing_links:
 			# Raise rather than return, so complete_all_tasks reports this as
@@ -266,7 +269,17 @@ class RewardsTaskUtils:
 		total = len(explore_on_bing_links)
 		self.progress = f"searched 0 of {total} cards"
 
-		for number, card in enumerate(explore_on_bing_links, start=1):
+		for number in range(1, total + 1):
+			# Read again before every card. Coming back from the search tab
+			# re-renders the section, so a reference taken before the first
+			# search went stale: "searched 2 of 3 cards, then
+			# StaleElementReferenceException" (#102).
+			cards = self._explore_on_bing_cards()
+
+			if number > len(cards):
+				break
+
+			card = cards[number - 1]
 			desc = self.elements.extract_card_descriptions(card)
 			query = queries.search_query_for_task(desc)
 
@@ -288,7 +301,7 @@ class RewardsTaskUtils:
 
 		time.sleep(random.uniform(1, 2)) # allow card statuses to update
 
-		for card in explore_on_bing_links:
+		for card in self._explore_on_bing_cards():
 			if not self.elements.card_is_complete(card):
 				logger.warning(
 					"Explore on Bing Card [desc=%r] is not complete after searching. Please check manually.",
