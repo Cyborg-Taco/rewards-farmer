@@ -15,11 +15,23 @@ import queries
 import mouse_trajectory
 import mimic_typing
 import element_selectors
+import run_record
+import quest_steps
 
 from constants import REPO_ROOT
 
 VISUAL_SEARCH_IMAGE_PATH = os.path.join(REPO_ROOT, "visual_search.jpg")
 
+TASKS = (
+	("daily_set", "Bing daily set", "complete_bing_daily_set"),
+	("explore_on_bing", "Explore on Bing", "complete_explore_on_bing_tasks"),
+	("visual_search", "Visual search", "complete_visual_search"),
+	("misc_cards", "Misc cards", "complete_misc_cards"),
+	("quests", "Quests", "complete_quests"),
+	("searches", "Required searches", "complete_required_searches"),
+	("bonus", "Bonus points", "claim_bonus_points"),
+)
+TASK_IDS = tuple(task_id for task_id, _, _ in TASKS)
 REWARDS_HOME_URL = "https://rewards.bing.com/"
 
 logger = logging.getLogger(__name__)
@@ -584,9 +596,11 @@ class RewardsTaskUtils:
 
 			activity = activities[0]
 			label = (activity.text or "").strip()
+			href = activity.get_dom_attribute("href") or ""
 			clicked.add(activity_key(activity))
 
 			self.move_to_and_click(activity)
+			quest_steps.record_click(url, href, label)
 			time.sleep(random.uniform(2, 4))
 			self.tab_utils.close_all_other_tabs()
 
@@ -732,21 +746,16 @@ class RewardsTaskUtils:
 		except TimeoutException:
 			logger.warning("Could not find the 'Claim Bonus Points' button. There are likely no bonus points to claim at this time.")
 
-	def complete_all_tasks(self):
+	def complete_all_tasks(self, *, only=None):
 		# Each task is run independently. The Rewards UI differs by market and
 		# changes between deploys, so a task the current variant does not ship
 		# must not take the remaining ones down with it.
-		steps = (
-			("Bing daily set", self.complete_bing_daily_set),
-			("Explore on Bing", self.complete_explore_on_bing_tasks),
-			("Visual search", self.complete_visual_search),
-			("Misc cards", self.complete_misc_cards),
-			("Quests", self.complete_quests),
-			("Required searches", self.complete_required_searches),
-			("Bonus points", self.claim_bonus_points),
-		)
-
-		for name, step in steps:
+		for task_id, name, method in TASKS:
+			if only is not None and task_id not in only:
+				continue
+			began = time.monotonic()
+			run_record.emit("task_start", task=task_id, name=name)
+			outcome, reason = "ok", None
 			# The tags stay in the message rather than being folded into the
 			# level, they are the per-task outcome summary and reading a run
 			# means scanning for them.
@@ -757,11 +766,12 @@ class RewardsTaskUtils:
 			self.progress = None
 
 			try:
-				step()
+				getattr(self, method)()
 				logger.info("[OK] %s", name)
 				completed = True
 			except Exception as exc:
 				tag, reason = task_failure_report(exc, self.progress)
+				outcome = "skip" if tag == "SKIP" else "fail"
 
 				logger.log(
 					logging.WARNING if tag == "SKIP" else logging.ERROR,
@@ -776,3 +786,5 @@ class RewardsTaskUtils:
 
 			if not completed:
 				self.return_to_rewards_home()
+			run_record.emit("task_end", task=task_id, name=name, outcome=outcome, detail=reason,
+				progress=self.progress, duration_ms=round((time.monotonic() - began) * 1000))

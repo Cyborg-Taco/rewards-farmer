@@ -2,6 +2,8 @@
 
 Automation for MS Rewards based on [https://youtu.be/4qdPcMNaioA](https://youtu.be/4qdPcMNaioA).
 
+A Windows desktop app built on this farmer, with setup, run history and a schedule, lives in [mardausdennis/rewards-farmer-app](https://github.com/mardausdennis/rewards-farmer-app).
+
 ## Table of Contents
 
 - [Core Setup & Running Instructions](#core-setup--running-instructions)
@@ -12,6 +14,7 @@ Automation for MS Rewards based on [https://youtu.be/4qdPcMNaioA](https://youtu.
 - [Running more than one account](#running-more-than-one-account)
 - [Docker](#docker)
 - [Logging](#logging)
+- [Conditional runs and records](#conditional-runs-and-records)
 - [Windows Virtual Desktop (Windows only)](#windows-virtual-desktop-windows-only)
 
 
@@ -241,6 +244,26 @@ REWARDS_FARMER_LOG_LEVEL=DEBUG REWARDS_FARMER_LOG_FILE=run.log python src/main.p
 ```
 
 If you are opening an issue about a crash, running with `REWARDS_FARMER_LOG_LEVEL=DEBUG` and attaching the log is the most useful thing you can include.
+
+## Conditional runs and records
+
+`--read-state` records open work before and after farming. `--check-only` reads it without starting tasks; it still opens Edge to inspect the Rewards page
+
+`--only-if-open` reads first and runs when at least 15 points are known to be open, or a quest step is unlocked. Change the threshold with `--min-points`; when only a quest qualifies, only quests run. An unreadable page is skipped unless you also pass `--run-if-unreadable`. `--unattended` exits without waiting for Enter
+
+Windows (PowerShell)
+```sh
+python src/main.py --only-if-open --min-points 20 --unattended
+```
+
+*nix (Bash)
+```sh
+python src/main.py --check-only --unattended
+```
+
+Runs write timestamped JSONL records under `runs/`, with account and task outcomes and any requested state reads. `runs/quest-steps-today.json` tracks quest links already clicked today so an unchanged link does not trigger another conditional run. Without new flags, console output stays unchanged
+
+A lock under `USER_DATA_DIR` (by default `data-dir`) prevents two farmer runs from using the same profile root at once. A second run exits with code 3 before opening Edge
 
 ## Windows Virtual Desktop (Windows only)
 
